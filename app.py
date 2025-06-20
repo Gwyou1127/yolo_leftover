@@ -13,7 +13,7 @@ import uvicorn
 
 app = FastAPI(title="YOLO Object Detection API", version="1.0.0")
 
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
 
 # CORS 미들웨어 추가 (웹에서 접근 가능하도록)
 app.add_middleware(
@@ -101,7 +101,7 @@ def draw_detections(image: np.ndarray, results) -> str:
 async def root():
     return {"message": "YOLO Object Detection API", "status": "running"}
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     """API 상태 확인"""
     return {
@@ -110,7 +110,7 @@ async def health_check():
         "model_info": str(model.model.yaml) if model else None
     }
 
-@app.post("/detect")
+@app.post("/api/detect")
 async def detect_objects(file: UploadFile = File(...)):
     """이미지에서 객체 감지"""
     if model is None:

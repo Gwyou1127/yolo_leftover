@@ -260,12 +260,9 @@
 
         // 서버 URL 자동 감지
         const POSSIBLE_URLS = [
-            'http://localhost:8000',
-            'http://127.0.0.1:8000',
-            `${window.location.protocol}//${window.location.hostname}:8000`,
-            `${window.location.origin.replace(window.location.port, '8000')}`,
+            window.location.origin + '/api'
         ];
-        
+                
         let currentServerUrl = null;
 
         // 드래그 앤 드롭 이벤트
