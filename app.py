@@ -33,6 +33,13 @@ hide_streamlit_style = """
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
+st.markdown("""
+    <style>
+        footer {visibility: hidden !important;}
+        div[class*="st-emotion-cache"] footer {display: none !important;}
+    </style>
+""", unsafe_allow_html=True)
+
 
 # 경고 제거 및 로그 최소화
 warnings.filterwarnings('ignore')
