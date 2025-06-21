@@ -211,7 +211,7 @@ def detect_objects(image_bytes, confidence_threshold=0.5):
             img_array = cv2.resize(img_array, (new_width, new_height))
         
         # YOLO 추론 (verbose=False로 로그 최소화)
-        results = model.predict(img_array, conf=confidence_threshold, verbose=False)
+        results = model(img_array, conf=confidence_threshold, verbose=False)
         
         # 결과 처리
         detections = []
