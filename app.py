@@ -1,144 +1,193 @@
-# YOLOv8 Streamlit 앱 (UX 개선 + 감지 정보 + 영상 지원)
-
 import streamlit as st
 import cv2
 import numpy as np
 from ultralytics import YOLO
 from PIL import Image
 import io
-import os
-import torch
-import tempfile
+import base64
 import time
-import random
+import os
 import warnings
+import torch
+import random
+import tempfile
 
-# 설정
-st.set_page_config(page_title="🍴 잔반 탐지기", page_icon="🍴", layout="wide")
-os.environ['YOLO_VERBOSE'] = 'False'
+# 경고 메시지 및 로그 최소화
 warnings.filterwarnings('ignore')
+os.environ['YOLO_VERBOSE'] = 'False'
+
+# 시드 고정
 np.random.seed(42)
 torch.manual_seed(42)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(42)
 
-# 모델 로딩
+# 페이지 설정
+st.set_page_config(
+    page_title="🍴 잔반 탐지기",
+    page_icon="🍴",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
 @st.cache_resource(show_spinner=True)
 def load_model():
-    return YOLO("best.pt")
+    try:
+        with st.spinner("🤖 AI 모델을 로드하는 중..."):
+            model = YOLO('best.pt')
+        return model, "✅ 모델 로드 성공"
+    except Exception as e:
+        st.error(f"모델 로드 중 오류가 발생했습니다: {str(e)}")
+        return None, f"❌ 모델 로드 실패: {str(e)}"
 
-# 라벨 색 고정
-def get_label_colors(model):
-    random.seed(42)
-    return [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in model.names]
+def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
+    model, status = load_model()
+    if model is None:
+        return None, [], status
 
-# 감지 통계 출력
-def display_stats(detections):
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            tmp.write(image_bytes)
+            tmp_path = tmp.name
+
+        random.seed(42)
+        label_colors = [(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)) for _ in model.names]
+
+        image = cv2.imread(tmp_path)
+        annotated_image = image.copy()
+
+        outputs = model.predict(source=tmp_path, conf=confidence_threshold, iou=0.5)
+        results = outputs[0].cpu().numpy()
+
+        detections = []
+        for i, det in enumerate(results.boxes.xyxy):
+            x1, y1, x2, y2 = map(int, det)
+            label_idx = int(results.boxes.cls[i])
+            conf = round(float(results.boxes.conf[i]), 2)
+            label = model.names[label_idx]
+            box_color = label_colors[label_idx]
+
+            label_text = f"{label} {conf:.2f}"
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), box_color, 20, cv2.LINE_AA)
+            (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+            cv2.rectangle(annotated_image, (x1, y1 - th - 3), (x1 + tw, y1), box_color, -1)
+            cv2.putText(annotated_image, label_text, (x1, y1 - 3), cv2.FONT_HERSHEY_SIMPLEX, 3, (255, 255, 255), 16)
+
+            detections.append({
+                "class_name": label,
+                "confidence": conf,
+                "bbox": [x1, y1, x2, y2],
+                "area": (x2 - x1) * (y2 - y1),
+                "class_id": label_idx
+            })
+
+        annotated_image_rgb = cv2.cvtColor(annotated_image, cv2.COLOR_BGR2RGB)
+        return Image.fromarray(annotated_image_rgb), detections, "✅ 감지 완료"
+
+    except Exception as e:
+        st.error(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
+        return None, [], f"❌ 처리 중 오류: {str(e)}"
+
+def get_confidence_color_class(confidence):
+    if confidence >= 0.8:
+        return "confidence-high"
+    elif confidence >= 0.5:
+        return "confidence-medium"
+    else:
+        return "confidence-low"
+
+def display_detection_stats(detections):
+    if not detections:
+        return
+
     class_counts = {}
+    total_area = 0
     for det in detections:
-        class_counts[det[0]] = class_counts.get(det[0], 0) + 1
+        class_name = det['class_name']
+        class_counts[class_name] = class_counts.get(class_name, 0) + 1
+        total_area += det['area']
 
-    total = len(detections)
-    avg_conf = sum([conf for _, conf in detections]) / total if total > 0 else 0
-    max_conf = max([conf for _, conf in detections], default=0)
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📊 총 객체", len(detections))
+    with col2:
+        st.metric("🏷️ 클래스 수", len(class_counts))
+    with col3:
+        avg_conf = sum(det['confidence'] for det in detections) / len(detections)
+        st.metric("🎯 평균 정확도", f"{avg_conf:.1%}")
+    with col4:
+        max_conf = max(det['confidence'] for det in detections)
+        st.metric("⭐ 최고 정확도", f"{max_conf:.1%}")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("총 객체 수", total)
-    col2.metric("평균 정확도", f"{avg_conf:.2%}")
-    col3.metric("최고 정확도", f"{max_conf:.2%}")
+def process_single_image(uploaded_file, confidence_threshold):
+    file_size_mb = uploaded_file.size / (1024 * 1024)
+    st.write(f"**📊 파일 크기:** {file_size_mb:.2f} MB")
+    if file_size_mb > 10:
+        st.error("❌ 파일 크기가 10MB를 초과합니다.")
+        return
 
-# 이미지 감지
-def detect_image(image_bytes, confidence):
-    model = load_model()
-    label_colors = get_label_colors(model)
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    img_array = np.array(image)
-    results = model.predict(img_array, conf=confidence, iou=0.5)[0].cpu().numpy()
+    image_bytes = uploaded_file.read()
+    with st.spinner("🔍 이미지를 분석하는 중..."):
+        annotated_image, detections, status = detect_objects_consistent(image_bytes, confidence_threshold)
 
-    detections = []
-    for i, box in enumerate(results.boxes.xyxy):
-        x1, y1, x2, y2 = map(int, box)
-        cls = int(results.boxes.cls[i])
-        conf = float(results.boxes.conf[i])
-        label = model.names[cls]
-        color = label_colors[cls]
-        cv2.rectangle(img_array, (x1, y1), (x2, y2), color, 2)
-        cv2.putText(img_array, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        detections.append((label, conf, [x1, y1, x2, y2]))
-    return Image.fromarray(img_array), detections
+    if annotated_image is not None:
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.subheader("📸 원본 이미지")
+            original_image = Image.open(io.BytesIO(image_bytes))
+            st.image(original_image, use_container_width=True)
+        with col2:
+            st.subheader(f"🎯 감지 결과 ({len(detections)}개 객체)")
+            st.image(annotated_image, use_container_width=True)
 
-# 영상 감지
-def detect_video(video_file, confidence):
-    model = load_model()
-    label_colors = get_label_colors(model)
-    tfile = tempfile.NamedTemporaryFile(delete=False)
-    tfile.write(video_file.read())
-    cap = cv2.VideoCapture(tfile.name)
-    out_path = tempfile.mktemp(suffix=".mp4")
-    width, height = int(cap.get(3)), int(cap.get(4))
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    out = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (width, height))
+        if detections:
+            st.markdown("---")
+            st.subheader("📊 감지 통계")
+            display_detection_stats(detections)
 
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    progress = st.progress(0)
-    frame_idx = 0
+            st.subheader("📋 감지된 객체 상세 정보")
+            sorted_detections = sorted(detections, key=lambda x: x['confidence'], reverse=True)
+            for i, detection in enumerate(sorted_detections, 1):
+                with st.expander(f"🏷️ {i}. {detection['class_name']} ({detection['confidence']:.1%})"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.write(f"**정확도:** {detection['confidence']:.3f}")
+                        st.write(f"**클래스 ID:** {detection['class_id']}")
+                    with col2:
+                        width = detection['bbox'][2] - detection['bbox'][0]
+                        height = detection['bbox'][3] - detection['bbox'][1]
+                        st.write(f"**크기:** {width} × {height} px")
+                        st.write(f"**면적:** {detection['area']:,} pixels")
+                    st.write(f"**위치:** ({detection['bbox'][0]}, {detection['bbox'][1]}) → ({detection['bbox'][2]}, {detection['bbox'][3]})")
+        else:
+            st.warning("🤔 감지된 객체가 없습니다. 정확도 임계값을 낮춰보세요.")
+    else:
+        st.error(f"이미지 처리에 실패했습니다: {status}")
 
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-        results = model.predict(frame, conf=confidence, iou=0.5)[0]
-        if results.boxes is not None:
-            for i, box in enumerate(results.boxes.xyxy):
-                x1, y1, x2, y2 = map(int, box)
-                cls = int(results.boxes.cls[i])
-                conf = float(results.boxes.conf[i])
-                label = model.names[cls]
-                color = label_colors[cls]
-                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        out.write(frame)
-        frame_idx += 1
-        progress.progress(min(frame_idx / total, 1.0))
+def main():
+    st.title("🍴 잔반 탐지기")
+    st.markdown("""
+    ### 🤖 YOLOv8 기반 객체 감지 시스템
+    이미지를 업로드하면 다양한 객체를 자동으로 감지하고 분석합니다.
+    """)
 
-    cap.release()
-    out.release()
-    return out_path
+    with st.sidebar:
+        st.header("⚙️ 설정")
+        confidence_threshold = st.slider("🎯 정확도 임계값", 0.1, 1.0, 0.5, 0.05)
 
-# UI 시작
-st.title("🍴 잔반 탐지기")
-tabs = st.tabs(["📷 이미지 추론", "🎞️ 영상 추론"])
+    uploaded_files = st.file_uploader("이미지를 선택하세요", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
 
-# 이미지 탭
-with tabs[0]:
-    uploaded_image = st.file_uploader("이미지를 업로드하세요", type=["jpg", "jpeg", "png"])
-    conf = st.slider("정확도 임계값", 0.1, 1.0, 0.5, step=0.05)
-    if uploaded_image:
-        image_bytes = uploaded_image.read()
-        st.subheader("📸 업로드된 이미지")
-        st.image(image_bytes, use_column_width=True)
-        with st.spinner("감지 중..."):
-            result_img, detections = detect_image(image_bytes, conf)
-        st.subheader("🎯 감지 결과")
-        st.image(result_img, use_column_width=True)
-        st.subheader("📊 감지 통계")
-        display_stats(detections)
-        st.subheader("📋 객체 상세 정보")
-        for i, (label, conf, box) in enumerate(sorted(detections, key=lambda x: -x[1])):
-            with st.expander(f"{i+1}. {label} ({conf:.2%})"):
-                st.write(f"정확도: {conf:.3f}")
-                st.write(f"좌표: {box}")
+    if uploaded_files:
+        if len(uploaded_files) == 1:
+            process_single_image(uploaded_files[0], confidence_threshold)
+        else:
+            st.success(f"📁 {len(uploaded_files)}개의 이미지가 업로드되었습니다!")
+            for i, uploaded_file in enumerate(uploaded_files):
+                st.markdown(f"## 📸 이미지 {i+1}")
+                process_single_image(uploaded_file, confidence_threshold)
+                st.markdown("---")
+    else:
+        st.info("💡 이미지를 업로드하여 객체 감지를 시작하세요!")
 
-# 영상 탭
-with tabs[1]:
-    uploaded_video = st.file_uploader("영상을 업로드하세요", type=["mp4", "mov", "avi"])
-    conf_v = st.slider("정확도 임계값", 0.1, 1.0, 0.5, step=0.05, key="video_conf")
-    if uploaded_video:
-        st.subheader("🎞️ 업로드된 영상")
-        st.video(uploaded_video, format="video/mp4")
-        with st.spinner("영상 처리 중... 시간이 다소 걸릴 수 있습니다"):
-            out_path = detect_video(uploaded_video, conf_v)
-        st.success("🎉 영상 처리 완료!")
-        st.video(out_path)
-        with open(out_path, "rb") as f:
-            st.download_button("📥 결과 영상 다운로드", f, file_name="output.mp4")
+if __name__ == "__main__":
+    main()
