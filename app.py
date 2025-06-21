@@ -16,7 +16,7 @@ os.environ['YOLO_VERBOSE'] = 'False'
 
 # 페이지 설정
 st.set_page_config(
-    page_title="🍴 잔반 탐지기",
+    page_title="잔반 탐지기",
     page_icon="🍴",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -176,7 +176,6 @@ def load_model():
         with st.spinner("🤖 AI 모델을 로드하는 중..."):
             # CPU 사용 명시적 설정
             model = YOLO('best.pt')
-            model.to('cpu')
             
             # 모델 워밍업 (첫 추론 속도 개선)
             dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
@@ -211,7 +210,7 @@ def detect_objects(image_bytes, confidence_threshold=0.5):
             img_array = cv2.resize(img_array, (new_width, new_height))
         
         # YOLO 추론 (verbose=False로 로그 최소화)
-        results = model(img_array, conf=confidence_threshold, verbose=False)
+        results = model.predict(img_array, conf=confidence_threshold, verbose=False)
         
         # 결과 처리
         detections = []
