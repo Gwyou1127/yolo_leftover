@@ -176,6 +176,7 @@ def load_model():
         with st.spinner("🤖 AI 모델을 로드하는 중..."):
             # CPU 사용 명시적 설정
             model = YOLO('best.pt')
+            model.to('gpu')
             
             # 모델 워밍업 (첫 추론 속도 개선)
             dummy_image = np.zeros((640, 640, 3), dtype=np.uint8)
