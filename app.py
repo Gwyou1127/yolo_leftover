@@ -182,10 +182,13 @@ def main():
             process_single_image(uploaded_files[0], confidence_threshold)
         else:
             st.success(f"📁 {len(uploaded_files)}개의 이미지가 업로드되었습니다!")
-            for i, uploaded_file in enumerate(uploaded_files):
-                st.markdown(f"## 📸 이미지 {i+1}")
-                process_single_image(uploaded_file, confidence_threshold)
-                st.markdown("---")
+
+            tab_titles = [f"📸 이미지 {i+1}" for i in range(len(uploaded_files))]
+            tabs = st.tabs(tab_titles)
+            for i, (tab, uploaded_file) in enumerate(zip(tabs, uploaded_files)):
+                with tab:
+                    st.markdown(f"## {tab_titles[i]}")
+                    process_single_image(uploaded_file, confidence_threshold)
     else:
         st.info("💡 이미지를 업로드하여 객체 감지를 시작하세요!")
 
