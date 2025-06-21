@@ -12,7 +12,7 @@ import torch
 import random
 import tempfile
 
-# 경고 메시지 및 로그 최소화
+# 경고 제거 및 로그 최소화
 warnings.filterwarnings('ignore')
 os.environ['YOLO_VERBOSE'] = 'False'
 
@@ -24,7 +24,7 @@ if torch.cuda.is_available():
 
 # 페이지 설정
 st.set_page_config(
-    page_title="🍴 잔반 탐지기",
+    page_title="잔반 탐지기",
     page_icon="🍴",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -34,7 +34,7 @@ st.set_page_config(
 def load_model():
     try:
         with st.spinner("🤖 AI 모델을 로드하는 중..."):
-            model = YOLO('best.pt')
+            model = YOLO('best.pt')  # YOLOv8 학습된 모델 경로
         return model, "✅ 모델 로드 성공"
     except Exception as e:
         st.error(f"모델 로드 중 오류가 발생했습니다: {str(e)}")
@@ -71,7 +71,7 @@ def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
             cv2.rectangle(annotated_image, (x1, y1), (x2, y2), box_color, 20, cv2.LINE_AA)
             (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             cv2.rectangle(annotated_image, (x1, y1 - th - 3), (x1 + tw, y1), box_color, -1)
-            cv2.putText(annotated_image, label_text, (x1, y1 - 3), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 0), 16)
+            cv2.putText(annotated_image, label_text, (x1, y1 - 3), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 0, 0), 12)
 
             detections.append({
                 "class_name": label,
@@ -87,14 +87,6 @@ def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
     except Exception as e:
         st.error(f"이미지 처리 중 오류가 발생했습니다: {str(e)}")
         return None, [], f"❌ 처리 중 오류: {str(e)}"
-
-def get_confidence_color_class(confidence):
-    if confidence >= 0.8:
-        return "confidence-high"
-    elif confidence >= 0.5:
-        return "confidence-medium"
-    else:
-        return "confidence-low"
 
 def display_detection_stats(detections):
     if not detections:
@@ -164,17 +156,67 @@ def process_single_image(uploaded_file, confidence_threshold):
     else:
         st.error(f"이미지 처리에 실패했습니다: {status}")
 
+def process_video(video_file, confidence_threshold):
+    model, status = load_model()
+    if model is None:
+        st.error(status)
+        return
+
+    tfile = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
+    tfile.write(video_file.read())
+    tfile_path = tfile.name
+
+    cap = cv2.VideoCapture(tfile_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    output_path = tfile_path.replace(".mp4", "_output.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    progress = st.progress(0)
+    frame_count = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        results = model.predict(source=frame, conf=confidence_threshold, iou=0.5)[0]
+        for i, det in enumerate(results.boxes.xyxy):
+            x1, y1, x2, y2 = map(int, det)
+            label_idx = int(results.boxes.cls[i])
+            conf = round(float(results.boxes.conf[i]), 2)
+            label = model.names[label_idx]
+            color = (0, 255, 0)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 2, color, 10)
+
+        out.write(frame)
+        frame_count += 1
+        progress.progress(min(frame_count / total_frames, 1.0))
+
+    cap.release()
+    out.release()
+
+    st.success("✅ 영상 처리 완료!")
+    st.video(output_path)
+
 def main():
     st.title("🍴 잔반 탐지기")
     st.markdown("""
     ### 🤖 YOLOv8 기반 객체 감지 시스템
-    이미지를 업로드하면 다양한 객체를 자동으로 감지하고 분석합니다.
+    이미지를 업로드하거나 영상을 분석하여 다양한 객체를 감지합니다.
     """)
 
     with st.sidebar:
         st.header("⚙️ 설정")
         confidence_threshold = st.slider("🎯 정확도 임계값", 0.1, 1.0, 0.5, 0.05)
 
+    st.header("🖼️ 이미지 분석")
     uploaded_files = st.file_uploader("이미지를 선택하세요", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
 
     if uploaded_files:
@@ -182,7 +224,6 @@ def main():
             process_single_image(uploaded_files[0], confidence_threshold)
         else:
             st.success(f"📁 {len(uploaded_files)}개의 이미지가 업로드되었습니다!")
-
             tab_titles = [f"📸 이미지 {i+1}" for i in range(len(uploaded_files))]
             tabs = st.tabs(tab_titles)
             for i, (tab, uploaded_file) in enumerate(zip(tabs, uploaded_files)):
@@ -191,6 +232,15 @@ def main():
                     process_single_image(uploaded_file, confidence_threshold)
     else:
         st.info("💡 이미지를 업로드하여 객체 감지를 시작하세요!")
+
+    st.markdown("---")
+    st.header("🎥 영상 업로드")
+    uploaded_video = st.file_uploader("🎬 분석할 영상 파일을 업로드하세요", type=['mp4', 'avi', 'mov'])
+
+    if uploaded_video is not None:
+        st.video(uploaded_video)
+        with st.spinner("🔍 영상을 분석하는 중입니다..."):
+            process_video(uploaded_video, confidence_threshold)
 
 if __name__ == "__main__":
     main()
