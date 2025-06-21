@@ -15,7 +15,11 @@ import uvicorn
 app = FastAPI(title="YOLO Object Detection API", version="1.0.0")
 
 # 정적 파일 (HTML) 서빙
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+
+@app.get("/")
+async def index():
+    return FileResponse("static/index.html")
 
 # CORS 허용 설정
 app.add_middleware(
