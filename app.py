@@ -31,13 +31,13 @@ st.set_page_config(
         **주요 기능:**
         - 실시간 객체 감지
         - 다중 이미지 처리
-        - 신뢰도 조정
+        - 정확도 조정
         - 감지 통계 제공
         
         **사용 방법:**
         1. 이미지를 업로드하세요
         2. 감지 결과를 확인하세요
-        3. 필요시 신뢰도를 조정하세요
+        3. 필요시 정확도를 조정하세요
         """
     }
 )
@@ -135,6 +135,7 @@ st.markdown("""
     }
     
     .metric-card {
+        color: black;
         background: white;
         padding: 1rem;
         border-radius: 8px;
@@ -239,7 +240,7 @@ def detect_objects(image_bytes, confidence_threshold=0.5):
                     confidence = float(box.conf[0].cpu().numpy())
                     class_name = model.names[class_id]
                     
-                    # 신뢰도가 임계값 이상인 경우만 표시
+                    # 정확도가 임계값 이상인 경우만 표시
                     if confidence >= confidence_threshold:
                         # 클래스별 색상 선택
                         color = colors[class_id % len(colors)]
@@ -293,7 +294,7 @@ def detect_objects(image_bytes, confidence_threshold=0.5):
         return None, [], f"❌ 처리 중 오류: {str(e)}"
 
 def get_confidence_color_class(confidence):
-    """신뢰도에 따른 CSS 클래스 반환"""
+    """정확도에 따른 CSS 클래스 반환"""
     if confidence >= 0.8:
         return "confidence-high"
     elif confidence >= 0.5:
@@ -338,7 +339,7 @@ def display_detection_stats(detections):
         avg_conf = sum(det['confidence'] for det in detections) / len(detections)
         st.markdown("""
         <div class="metric-card">
-            <h3 style="color: #ffc107; margin: 0;">🎯 평균 신뢰도</h3>
+            <h3 style="color: #ffc107; margin: 0;">🎯 평균 정확도</h3>
             <p style="font-size: 2rem; font-weight: bold; margin: 0;">{:.1%}</p>
         </div>
         """.format(avg_conf), unsafe_allow_html=True)
@@ -347,7 +348,7 @@ def display_detection_stats(detections):
         max_conf = max(det['confidence'] for det in detections)
         st.markdown("""
         <div class="metric-card">
-            <h3 style="color: #dc3545; margin: 0;">⭐ 최고 신뢰도</h3>
+            <h3 style="color: #dc3545; margin: 0;">⭐ 최고 정확도</h3>
             <p style="font-size: 2rem; font-weight: bold; margin: 0;">{:.1%}</p>
         </div>
         """.format(max_conf), unsafe_allow_html=True)
@@ -386,14 +387,14 @@ def main():
     with st.sidebar:
         st.header("⚙️ 설정")
         
-        # 신뢰도 임계값
+        # 정확도 임계값
         confidence_threshold = st.slider(
-            "🎯 신뢰도 임계값",
+            "🎯 정확도 임계값",
             min_value=0.1,
             max_value=1.0,
             value=0.5,
             step=0.05,
-            help="이 값보다 높은 신뢰도의 객체만 표시됩니다. 값이 높을수록 정확하지만 적은 객체가 감지됩니다."
+            help="이 값보다 높은 정확도의 객체만 표시됩니다. 값이 높을수록 정확하지만 적은 객체가 감지됩니다."
         )
         
         # 모델 상태 확인
@@ -455,8 +456,7 @@ def main():
     # 푸터
     st.markdown("""
     <div class="footer">
-        <p>🔬 Powered by <strong>YOLOv8</strong> & <strong>Streamlit</strong></p>
-        <p>Made with ❤️ for AI Object Detection</p>
+    
     </div>
     """, unsafe_allow_html=True)
 
@@ -519,7 +519,7 @@ def process_single_image(uploaded_file, confidence_threshold, show_filename=Fals
             # 상세 결과 리스트
             st.markdown("### 📋 감지된 객체 상세 정보")
             
-            # 신뢰도 순으로 정렬
+            # 정확도 순으로 정렬
             sorted_detections = sorted(detections, key=lambda x: x['confidence'], reverse=True)
             
             for i, detection in enumerate(sorted_detections, 1):
@@ -535,7 +535,7 @@ def process_single_image(uploaded_file, confidence_threshold, show_filename=Fals
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <h4 style="margin: 0; color: #333;">🏷️ {i}. {detection['class_name']}</h4>
-                            <span class="{confidence_class}">{confidence:.1%} 신뢰도</span>
+                            <span class="{confidence_class}">{confidence:.1%} 정확도</span>
                         </div>
                         <div style="text-align: right; color: #6c757d;">
                             <small>크기: {width} × {height} px</small><br>
@@ -547,41 +547,9 @@ def process_single_image(uploaded_file, confidence_threshold, show_filename=Fals
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
-            
-            # 결과 다운로드 옵션
-            st.markdown("### 💾 결과 다운로드")
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # 감지 결과 이미지 다운로드
-                buf = io.BytesIO()
-                annotated_image.save(buf, format='PNG')
-                st.download_button(
-                    label="🖼️ 감지 결과 이미지 다운로드",
-                    data=buf.getvalue(),
-                    file_name=f"detected_{uploaded_file.name}",
-                    mime="image/png"
-                )
-            
-            with col2:
-                # 감지 결과 텍스트 다운로드
-                result_text = f"감지 결과 - {uploaded_file.name}\n"
-                result_text += f"총 {len(detections)}개 객체 감지\n\n"
-                
-                for i, det in enumerate(sorted_detections, 1):
-                    result_text += f"{i}. {det['class_name']} - {det['confidence']:.2f}\n"
-                    result_text += f"   위치: {det['bbox']}\n"
-                    result_text += f"   크기: {det['area']} pixels\n\n"
-                
-                st.download_button(
-                    label="📄 감지 결과 텍스트 다운로드",
-                    data=result_text,
-                    file_name=f"detection_results_{uploaded_file.name}.txt",
-                    mime="text/plain"
-                )
         else:
-            st.warning("🤔 감지된 객체가 없습니다. 신뢰도 임계값을 낮춰보세요.")
-            st.info("💡 **팁:** 왼쪽 사이드바에서 신뢰도 임계값을 0.3 이하로 낮춰보세요.")
+            st.warning("🤔 감지된 객체가 없습니다. 정확도 임계값을 낮춰보세요.")
+            st.info("💡 **팁:** 왼쪽 사이드바에서 정확도 임계값을 0.3 이하로 낮춰보세요.")
     else:
         progress_text.text("❌ 분석 실패")
         progress_bar.progress(0)
