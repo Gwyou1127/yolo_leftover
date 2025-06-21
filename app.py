@@ -216,7 +216,7 @@ def main():
         st.header("⚙️ 설정")
         confidence_threshold = st.slider("🎯 정확도 임계값", 0.1, 1.0, 0.5, 0.05)
 
-    st.header("🖼️ 이미지 분석")
+    st.header("이미지 분석")
     uploaded_files = st.file_uploader("이미지를 선택하세요", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
 
     if uploaded_files:
