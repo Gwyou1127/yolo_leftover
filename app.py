@@ -73,7 +73,7 @@ def draw_detections(image: np.ndarray, results) -> str:
                     class_name = model.names[class_id]
                     
                     # 바운딩 박스 그리기
-                    cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 0), 4)
                     
                     # 라벨 텍스트
                     label = f"{class_name}: {confidence:.2f}"
@@ -83,7 +83,7 @@ def draw_detections(image: np.ndarray, results) -> str:
                     cv2.rectangle(annotated_image, (x1, y1 - text_height - 10), (x1 + text_width, y1), (0, 255, 0), -1)
                     
                     # 텍스트 그리기
-                    cv2.putText(annotated_image, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 5)
+                    cv2.putText(annotated_image, label, (x1, y1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 6)
         
         # PIL Image로 변환
         annotated_pil = Image.fromarray(annotated_image)
