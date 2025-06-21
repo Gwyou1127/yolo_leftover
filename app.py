@@ -12,6 +12,17 @@ import torch
 import random
 import tempfile
 
+# 🚫 Streamlit 기본 UI 요소 숨기기
+hide_streamlit_style = """
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility: hidden;}
+        header {visibility: hidden;}
+        .stActionButton {display: none;}
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # 경고 제거 및 로그 최소화
 warnings.filterwarnings('ignore')
 os.environ['YOLO_VERBOSE'] = 'False'
