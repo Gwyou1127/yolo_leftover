@@ -19,9 +19,20 @@ hide_streamlit_style = """
         footer {visibility: hidden;}
         header {visibility: hidden;}
         .stActionButton {display: none;}
+
+        /* cloud의 Manage app 우회 제거 */
+        section[data-testid="stSidebarNav"] + div > div:has(button[title="Manage app"]) {
+            display: none !important;
+        }
+
+        /* 일부 layout 대응 */
+        div[data-testid="stSidebarNav"] ~ div > div:has(button[title="Manage app"]) {
+            display: none !important;
+        }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 
 # 경고 제거 및 로그 최소화
 warnings.filterwarnings('ignore')
