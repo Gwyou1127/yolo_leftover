@@ -10,6 +10,7 @@ import time
 import os
 import warnings
 import torch
+import random
 
 # 경고 메시지 및 로그 최소화
 warnings.filterwarnings('ignore')
@@ -32,20 +33,13 @@ st.set_page_config(
 # YOLO 모델 로드 (일관성을 위한 수정)
 @st.cache_resource(show_spinner=True)
 def load_model():
-    """YOLO 모델을 로드하고 캐시에 저장 - Gradio와 동일한 설정"""
+    """YOLO 모델을 로드하고 캐시에 저장 - Gradio와 완전 동일한 설정"""
     try:
         with st.spinner("🤖 AI 모델을 로드하는 중..."):
             model = YOLO('best.pt')
             
-            # Gradio와 동일한 설정 적용
-            model.to('cpu')  # 또는 'cuda' - Gradio에서 사용하는 것과 동일하게
-            
-            # 모델의 NMS 설정을 고정 (Gradio와 동일하게)
-            model.overrides['iou'] = 0.45  # IoU threshold
-            model.overrides['agnostic_nms'] = False
-            model.overrides['max_det'] = 300
-            
-            # 워밍업 없이 바로 반환 (일관성을 위해)
+            # Gradio에서는 특별한 설정을 하지 않으므로 기본 설정 사용
+            # 별도의 overrides 설정 제거
             
         return model, "✅ 모델 로드 성공"
     except Exception as e:
@@ -54,14 +48,14 @@ def load_model():
 
 # 객체 감지 함수 (일관성을 위한 대폭 수정)
 def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
-    """Gradio와 일관된 결과를 위한 객체 감지 함수"""
+    """Gradio와 완전히 동일한 결과를 위한 객체 감지 함수"""
     model, status = load_model()
     
     if model is None:
         return None, [], status
     
     try:
-        # bytes를 PIL Image로 변환 (Gradio와 동일한 방식)
+        # bytes를 PIL Image로 변환
         image = Image.open(io.BytesIO(image_bytes))
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -69,106 +63,58 @@ def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
         # 이미지를 numpy 배열로 변환
         img_array = np.array(image)
         
-        # ★ 중요: 이미지 리사이징을 Gradio와 동일하게 처리
-        # 만약 Gradio에서 특정 크기로 리사이징한다면 여기서도 동일하게
-        original_height, original_width = img_array.shape[:2]
+        # ★ 핵심 수정 1: Gradio와 동일한 랜덤 색상 생성
+        # 시드 고정으로 동일한 랜덤 색상 보장
+        random.seed(42)  # 고정된 시드
+        label_colors = []
+        for i in range(len(model.names)):
+            random_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            label_colors.append(random_color)
         
-        # Gradio에서 사용하는 전처리와 동일하게 맞춤
-        # 예: 640x640으로 패딩이나 리사이징을 한다면
-        # img_array = letterbox_resize(img_array, (640, 640))
-        
-        # YOLO 추론 - Gradio와 정확히 동일한 파라미터 사용
-        results = model(
-            img_array, 
-            conf=confidence_threshold,
-            iou=0.45,  # IoU threshold 명시적 설정
-            verbose=False,
-            save=False,
-            save_txt=False,
-            save_conf=False,
-            augment=False,  # 데이터 증강 비활성화 (일관성을 위해)
-            agnostic_nms=False,
-            max_det=300,
-            device='cpu'  # Gradio와 동일한 디바이스
+        # ★ 핵심 수정 2: Gradio와 동일한 모델 호출 방식
+        # model.predict() 대신 model() 사용하되 결과 처리를 Gradio 방식으로
+        outputs = model.predict(
+            source=img_array, 
+            conf=confidence_threshold, 
+            iou=0.5  # Gradio 기본값
         )
+        results = outputs[0].cpu().numpy()
         
-        # 결과 처리 - Gradio와 동일한 방식
         detections = []
         annotated_image = img_array.copy()
         
-        # Gradio와 동일한 색상 사용 (고정된 색상)
-        colors = [
-            (0, 255, 0),    # 녹색
-            (255, 0, 0),    # 빨간색  
-            (0, 0, 255),    # 파란색
-            (255, 255, 0),  # 노란색
-            (255, 0, 255),  # 마젠타
-            (0, 255, 255),  # 시안
-            (128, 0, 128),  # 보라색
-            (255, 165, 0),  # 주황색
-        ]
-        
-        for result in results:
-            if result.boxes is not None:
-                # 박스들을 정렬하여 일관된 순서 보장
-                boxes_data = []
-                for box in result.boxes:
-                    x1, y1, x2, y2 = map(float, box.xyxy[0].cpu().numpy())
-                    class_id = int(box.cls[0].cpu().numpy())
-                    confidence = float(box.conf[0].cpu().numpy())
-                    boxes_data.append((x1, y1, x2, y2, class_id, confidence))
-                
-                # 좌표 기준으로 정렬 (일관된 순서를 위해)
-                boxes_data.sort(key=lambda x: (x[1], x[0]))  # y좌표, x좌표 순
-                
-                for i, (x1, y1, x2, y2, class_id, confidence) in enumerate(boxes_data):
-                    if confidence >= confidence_threshold:
-                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                        class_name = model.names[class_id]
-                        
-                        # 클래스별 고정 색상 (Gradio와 동일)
-                        color = colors[class_id % len(colors)]
-                        
-                        # 바운딩 박스 그리기 (Gradio와 동일한 스타일)
-                        cv2.rectangle(annotated_image, (x1, y1), (x2, y2), color, 2)
-                        
-                        # 라벨 그리기 (Gradio와 동일한 방식)
-                        label = f"{class_name} {confidence:.2f}"
-                        font_scale = 0.7
-                        thickness = 2
-                        
-                        (label_width, label_height), baseline = cv2.getTextSize(
-                            label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, thickness
-                        )
-                        
-                        # 라벨 배경
-                        cv2.rectangle(
-                            annotated_image,
-                            (x1, y1 - label_height - baseline - 5),
-                            (x1 + label_width + 5, y1),
-                            color,
-                            -1
-                        )
-                        
-                        # 라벨 텍스트
-                        cv2.putText(
-                            annotated_image,
-                            label,
-                            (x1 + 2, y1 - baseline - 2),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            font_scale,
-                            (255, 255, 255),
-                            thickness
-                        )
-                        
-                        # 감지 결과 저장
-                        detections.append({
-                            "class_name": class_name,
-                            "confidence": confidence,
-                            "bbox": [x1, y1, x2, y2],
-                            "area": (x2 - x1) * (y2 - y1),
-                            "class_id": class_id
-                        })
+        # ★ 핵심 수정 3: Gradio와 동일한 결과 처리 (정렬 없음!)
+        for i, det in enumerate(results.boxes.xyxy):
+            x1, y1, x2, y2 = map(int, det)
+            label = model.names[int(results.boxes.cls[i])]
+            label_idx = int(results.boxes.cls[i])
+            conf = round(float(results.boxes.conf[i]), 2)
+            
+            # Gradio와 동일한 색상 선택
+            box_color = label_colors[label_idx]
+            
+            # ★ 핵심 수정 4: Gradio와 동일한 시각화 스타일
+            # 경계 상자 그리기 (Gradio와 동일한 두께: 20 -> 2로 조정)
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), box_color, 2, cv2.LINE_AA)
+            
+            # 라벨 텍스트 설정 (Gradio와 동일)
+            label_text = f"{label} {conf:.2f}"
+            (label_width, label_height), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.7, 2)
+            
+            # 라벨 배경 그리기 (Gradio와 동일)
+            cv2.rectangle(annotated_image, (x1, y1-label_height-3), (x1+label_width, y1), box_color, -1)
+            
+            # 라벨 텍스트 출력 (Gradio와 동일)
+            cv2.putText(annotated_image, label_text, (x1, y1-3), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # 감지 결과 저장
+            detections.append({
+                "class_name": label,
+                "confidence": conf,
+                "bbox": [x1, y1, x2, y2],
+                "area": (x2 - x1) * (y2 - y1),
+                "class_id": label_idx
+            })
         
         return Image.fromarray(annotated_image), detections, "✅ 감지 완료"
         
