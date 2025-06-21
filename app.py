@@ -11,6 +11,7 @@ import torch
 import tempfile
 import time
 import random
+import warnings
 
 # 설정
 st.set_page_config(page_title="🍴 잔반 탐지기", page_icon="🍴", layout="wide")
