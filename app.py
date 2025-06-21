@@ -13,7 +13,7 @@ import uvicorn
 
 app = FastAPI(title="YOLO Object Detection API", version="1.0.0")
 
-app.mount("/static", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 # CORS 미들웨어 추가 (웹에서 접근 가능하도록)
 app.add_middleware(
@@ -26,7 +26,7 @@ app.add_middleware(
 
 # YOLO 모델 로드 (모델 경로를 실제 경로로 변경하세요)
 try:
-    model = YOLO('best.pt')  # 또는 'your_custom_model.pt'
+    model = YOLO('yolov8n.pt')  # 또는 'your_custom_model.pt'
     print("YOLO 모델이 성공적으로 로드되었습니다.")
 except Exception as e:
     print(f"모델 로드 실패: {e}")
