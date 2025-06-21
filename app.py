@@ -224,5 +224,6 @@ async def get_classes():
     }
 
 if __name__ == "__main__":
-    print("YOLO Object Detection API 서버를 시작합니다...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("PORT", 10000))  # Render는 기본적으로 PORT 환경변수를 설정함
+    print(f"YOLO Object Detection API 서버를 시작합니다 (포트: {port})...")
+    uvicorn.run(app, host="0.0.0.0", port=port)
