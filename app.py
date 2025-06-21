@@ -216,31 +216,36 @@ def main():
         st.header("⚙️ 설정")
         confidence_threshold = st.slider("🎯 정확도 임계값", 0.1, 1.0, 0.5, 0.05)
 
-    st.header("이미지 분석")
-    uploaded_files = st.file_uploader("이미지를 선택하세요", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
+    tab1, tab2 = st.tabs(["📷 이미지 분석", "🎥 영상 분석"])
 
-    if uploaded_files:
-        if len(uploaded_files) == 1:
-            process_single_image(uploaded_files[0], confidence_threshold)
+    with tab1:
+        st.header("🖼️ 이미지 업로드")
+        uploaded_files = st.file_uploader("이미지를 선택하세요", type=['jpg', 'jpeg', 'png', 'webp'], accept_multiple_files=True)
+
+        if uploaded_files:
+            if len(uploaded_files) == 1:
+                process_single_image(uploaded_files[0], confidence_threshold)
+            else:
+                st.success(f"📁 {len(uploaded_files)}개의 이미지가 업로드되었습니다!")
+                tab_titles = [f"📸 이미지 {i+1}" for i in range(len(uploaded_files))]
+                image_tabs = st.tabs(tab_titles)
+                for i, (tab, uploaded_file) in enumerate(zip(image_tabs, uploaded_files)):
+                    with tab:
+                        st.markdown(f"## {tab_titles[i]}")
+                        process_single_image(uploaded_file, confidence_threshold)
         else:
-            st.success(f"📁 {len(uploaded_files)}개의 이미지가 업로드되었습니다!")
-            tab_titles = [f"📸 이미지 {i+1}" for i in range(len(uploaded_files))]
-            tabs = st.tabs(tab_titles)
-            for i, (tab, uploaded_file) in enumerate(zip(tabs, uploaded_files)):
-                with tab:
-                    st.markdown(f"## {tab_titles[i]}")
-                    process_single_image(uploaded_file, confidence_threshold)
-    else:
-        st.info("💡 이미지를 업로드하여 객체 감지를 시작하세요!")
+            st.info("💡 이미지를 업로드하여 객체 감지를 시작하세요!")
 
-    st.markdown("---")
-    st.header("🎥 영상 업로드")
-    uploaded_video = st.file_uploader("🎬 분석할 영상 파일을 업로드하세요", type=['mp4', 'avi', 'mov'])
+    with tab2:
+        st.header("🎥 영상 업로드")
+        uploaded_video = st.file_uploader("🎬 분석할 영상 파일을 업로드하세요", type=['mp4', 'avi', 'mov'])
 
-    if uploaded_video is not None:
-        st.video(uploaded_video)
-        with st.spinner("🔍 영상을 분석하는 중입니다..."):
-            process_video(uploaded_video, confidence_threshold)
+        if uploaded_video is not None:
+            st.video(uploaded_video)
+            with st.spinner("🔍 영상을 분석하는 중입니다..."):
+                process_video(uploaded_video, confidence_threshold)
+        else:
+            st.info("💡 분석할 영상 파일을 업로드하세요!")
 
 if __name__ == "__main__":
     main()
