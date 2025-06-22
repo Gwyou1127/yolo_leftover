@@ -97,10 +97,10 @@ def detect_objects_consistent(image_bytes, confidence_threshold=0.5):
             box_color = label_colors[label_idx]
 
             label_text = f"{label} {conf:.2f}"
-            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), box_color, 20, cv2.LINE_AA)
+            cv2.rectangle(annotated_image, (x1, y1), (x2, y2), box_color, 16, cv2.LINE_AA)
             (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
             cv2.rectangle(annotated_image, (x1, y1 - th - 3), (x1 + tw, y1), box_color, -1)
-            cv2.putText(annotated_image, label_text, (x1, y1 - 3), cv2.FONT_HERSHEY_SIMPLEX, 2.2, (0, 0, 0), 8)
+            cv2.putText(annotated_image, label_text, (x1, y1 - 3), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (0, 0, 0), 6)
 
             detections.append({
                 "class_name": label,
